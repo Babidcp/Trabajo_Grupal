@@ -1,0 +1,356 @@
+---
+title: "Entregable 3"
+author: "Bárbara del Castillo Prieto (20173266)"
+date: '2022-06-17'
+output: rmdformats::readthedown
+---
+
+# I. Acciones previas
+## 1. Descargar librerías
+```{r message=FALSE, warning=FALSE}
+library(rio)
+library(DescTools)
+library(ggplot2)
+library(moments)
+library(Rmisc)
+library(e1071)
+library(psych)
+library(dplyr)
+library(gplots)
+library(vcd)
+library(PMCMRplus)
+library(nortest)
+library(car)
+library(stargazer)
+library(lm.beta)
+library(gtools)
+library(jtools)
+library(ggstance)
+library(broom.mixed)
+library(fastDummies)
+library(writexl)
+library(lmtest)
+library(polycor)
+library(ggcorrplot)
+library(matrixcalc)
+library(GPArotation)
+library(lavaan)
+library(BBmisc)
+library(cluster)
+library(factoextra)
+library(qpcR)
+```
+
+## 2. Importar base de datos
+```{r}
+vdem = import("https://github.com/Babidcp/Trabajo_Grupal/blob/main/V-Dem-CY-Core-v12.rds?raw=true")
+```
+
+## 3. Variable dependiente - Índice de Democracia Liberal (v2x_libdem)
+```{r}
+summary(vdem$v2x_libdem)
+```
+
+```{r}
+str(vdem$v2x_libdem)
+```
+
+## 4. Variables independientes - Bárbara del Castillo
+### 4.1. Organizaciones de Sociedad civil
+##### 4.1.1. Represión gubernamental de Organizaciones de Sociedad Civil (v2csreprss_ord)
+```{r}
+str(vdem$v2csreprss_ord)
+summary(vdem$v2csreprss_ord)
+```
+
+##### 4.1.2. Control gubernamental sobre Organizaciones de Sociedad Civil (v2cseeorgs_ord)
+```{r}
+str(vdem$v2cseeorgs_ord)
+summary(vdem$v2cseeorgs_ord)
+```
+
+##### 4.1.3. Consulta gubernamental hacia Organizaciones de Sociedad Civil (v2cscnsult_ord)
+```{r}
+str(vdem$v2cscnsult_ord)
+summary(vdem$v2cscnsult_ord)
+```
+
+## 5. Variables independientes - Frank Pinares
+### 5.1. Libertad de Expresión
+##### 5.1.1. Libertad de Discusión para Hombres (v2cldiscm_ord)
+```{r}
+str(vdem$v2cldiscm_ord)
+summary(vdem$v2cldiscm_ord)
+```
+
+##### 5.1.2. Libertad de Discusión para Mujeres (v2cldiscw_ord)
+```{r}
+str(vdem$v2cldiscw_ord)
+summary(vdem$v2cldiscw_ord)
+```
+
+##### 5.1.3. Libertad de Expresión Académica y Cultural (v2clacfree_ord)
+```{r}
+str(vdem$v2clacfree_ord)
+summary(vdem$v2clacfree_ord)
+```
+
+## 6. Cambiar el nombre de las variables
+```{r message=FALSE, warning=FALSE}
+library(reshape)
+vdem = rename(vdem, c(v2x_libdem="Indice_democracia_liberal"))
+vdem = rename(vdem, c(v2csreprss_ord="Represion_gubernamental"))
+vdem = rename(vdem, c(v2cseeorgs_ord="Control_gubernamental"))
+vdem = rename(vdem, c(v2cscnsult_ord="Consulta_gubernamental"))
+vdem = rename(vdem, c(v2cldiscm_ord="Libertad_discusion_H"))
+vdem = rename(vdem, c(v2cldiscw_ord="Libertad_discusion_M"))
+vdem = rename(vdem, c(v2clacfree_ord="Libertad_expresion_AcayCul"))
+vdem = rename(vdem, c(country_name="Pais"))
+vdem = rename(vdem, c(year="Año"))
+```
+
+## 7. Armar la base de apoyo
+```{r}
+factor_barbara = subset(vdem, select = c(Pais, Año, Indice_democracia_liberal, Represion_gubernamental, Control_gubernamental, Consulta_gubernamental, Libertad_discusion_H, Libertad_discusion_M, Libertad_expresion_AcayCul))
+```
+
+```{r}
+factor_barbara = factor_barbara[factor_barbara$Año==2021,]
+```
+
+```{r}
+factor_barbara$Pais = NULL
+factor_barbara$Año = NULL
+factor_barbara$Indice_democracia_liberal = NULL
+```
+
+# II. Análisis Factorial Exploratorio
+## 1. Explorar las correlaciones entre las variables
+```{r}
+corMatrix_b = polycor::hetcor(factor_barbara)$correlations
+corMatrix_b
+```
+
+## 2. Graficar la matriz de correlaciones
+```{r}
+ggcorrplot(corMatrix_b)
+```
+
+## 3. Verificar validez del análisis factorial
+### 3.1. Verificar si variables se pueden factorizar 
+Overall MSA es mayor a 0.6, por lo que el análisis factorial es factible.
+```{r}
+psych::KMO(corMatrix_b)
+```
+
+### 3.2. Descartar una posible matriz identidad
+Sale FALSE (p-value NO es mayor a 0.05), por lo que el análisis factorial es factible.
+```{r}
+cortest.bartlett(corMatrix_b, n = nrow(factor_barbara))$p.value>0.05
+```
+
+### 3.3. Descartar una posible matriz singular
+Sale FALSE, por lo que el análisis factorial es factible.
+```{r}
+is.singular.matrix(corMatrix_b)
+```
+
+## 4. Determinar en cuántos factores se pueden agrupar las variables
+Se sugiere 1, lo esperado, sigamos.
+```{r}
+fa.parallel(factor_barbara, fm = "ML", fa = "fa")
+```
+
+## 5. Observar las cargas factoriales y ver en qué factores se ubicaría cada variable
+```{r message=FALSE, warning=FALSE}
+resfa_b <- fa(factor_barbara, 
+              nfactors = 1, 
+              cor = "mixed", 
+              rotate = "varimax", 
+              fm = "minres")
+print(resfa_b$loadings, cutoff = 0.5)
+```
+
+## 6. Graficar cómo se agrupan las variables
+```{r}
+fa.diagram(resfa_b)
+```
+
+## 7. Evaluar los resultados obtenidos
+### 7.1. ¿Qué variables aportaron más a los factores?
+```{r}
+sort(resfa_b$communality)
+```
+
+## 8. Observar los posibles valores proyectados
+### 8.1. Para grabar en la base los puntajes de los factores
+```{r}
+factor_barbara$puntaje = resfa_b$scores
+```
+
+# II. Análisis Factorial Confirmatorio
+## 1. Construir un modelo lineal 
+```{r}
+modelob <- "factorb =~ Represion_gubernamental + Control_gubernamental + Consulta_gubernamental + Libertad_discusion_H + Libertad_discusion_M + Libertad_expresion_AcayCul"
+```
+
+## 2. Crear un objeto para hacer las validaciones
+```{r}
+cfa_fit <- cfa(modelob, data = factor_barbara, std.lv = TRUE, missing = "fiml")
+```
+
+## 3. Preparar los tests para las validaciones
+```{r}
+allParamCFA = parameterEstimates(cfa_fit, standardized = T)
+allFitCFA = as.list(fitMeasures(cfa_fit))
+```
+
+## 4. Ver si cada variable tiene una buena relación con su factor 
+(p-value < 0.05 indica que la variable observable tiene buena relación con su latente)
+```{r}
+allParamCFA[allParamCFA$op=="=~",]
+```
+
+## 5. Ver si la asignación de variables ha sido relativamente buena 
+(p-value > 0.05 para validar el modelo)
+```{r}
+allFitCFA[c("chisq", "df", "pvalue")]
+```
+
+## 6. Otra prueba para ver si el análisis factorial es relativamente bueno 
+(índice Tucker-Lewi debe ser mayor a 0.9)
+Sí es mayor a 0.09 (0.9234639)
+```{r}
+allFitCFA$tli
+```
+
+## 7. Ver si la raíz del error cuadrático medio de aproximación es menor a 0.05 
+(Ver rmsea)
+No es menor a 0.05 (0.1930856)
+```{r}
+allFitCFA[c("rmsea.ci.lower", "rmsea", "rmsea.ci.upper")]
+```
+
+## 8. Hacer predicciones (scores) de las variables latentes
+```{r}
+scorescfa = normalize(lavPredict(cfa_fit), 
+                      method = "range", 
+                      margin = 2, 
+                      range = c(0, 10))
+```
+
+```{r}
+factor_barbara$prediccion = scorescfa
+```
+
+# III. Clusterización o Análisis de Conglomerados
+## 1. Armar una base de apoyo
+```{r}
+cluster_barbara = subset(vdem, select = c(Pais, Año, Indice_democracia_liberal, Represion_gubernamental, Control_gubernamental, Consulta_gubernamental, Libertad_discusion_H, Libertad_discusion_M, Libertad_expresion_AcayCul))
+```
+
+```{r}
+cluster_barbara = cluster_barbara[cluster_barbara$Año==2021,]
+```
+
+```{r}
+row.names(cluster_barbara) = cluster_barbara$Pais
+```
+
+```{r}
+cluster_barbara$Pais = NULL
+cluster_barbara$Año = NULL
+cluster_barbara$Indice_democracia_liberal = NULL
+```
+
+## 2. Calcular las distancias entre elementos que permita agruparlos en clusters
+```{r}
+g.dist = daisy(cluster_barbara[, c(1:6)], metric = "gower")
+```
+
+## 3. Para obtener el número recomendado de clusters
+### 3.1. Clusterización no jerárquica (PAM)
+```{r}
+fviz_nbclust(cluster_barbara[, c(1:6)], pam, diss = g.dist, method = "gap_stat", k.max = 10, verbose = F)
+```
+
+### 3.2. Clusterización por agrupación (AGNES)
+```{r}
+fviz_nbclust(cluster_barbara[, c(1:6)], hcut, diss = g.dist, method = "gap_stat", k.max = 10, verbose = F, hc_func = "agnes")
+```
+
+### 3.3. Clusterización por división (DIANA)
+```{r}
+fviz_nbclust(cluster_barbara[, c(1:6)], hcut, diss = g.dist, method = "gap_stat", k.max = 10, verbose = F, hc_func = "diana")
+```
+
+## 4. Hacer asignación de clusters en base a número de clusters recomendados
+### 4.1. Clusterización no jerárquica (PAM)
+```{r}
+res.pam = pam(g.dist, k = 9, cluster.only = F)
+cluster_barbara$clustPT = res.pam$cluster
+```
+
+### 4.2. Clusterización agrupativa (AGNES)
+```{r}
+res.agnes = hcut(g.dist, k = 4, hc_func = "agnes", hc_method = "ward.D")
+cluster_barbara$clustAG = res.agnes$cluster
+```
+
+### 4.3. Clusterización divisiva (DIANA)
+```{r}
+res.diana = hcut(g.dist, k = 2, hc_func = "diana")
+cluster_barbara$clustDIV = res.diana$cluster
+```
+
+## 5. Dar puntaje a la clusterización
+### 5.1. Clusterización no jerárquica (PAM)
+```{r}
+fviz_silhouette(res.pam)
+```
+
+### 5.2. Clusterización agrupativa (AGNES)
+```{r}
+fviz_silhouette(res.agnes)
+```
+
+### 5.3. Clusterización divisiva (DIANA)
+```{r}
+fviz_silhouette(res.diana)
+```
+
+## 6. Encontrar los casos mal clusterizados según cada método
+### 6.1. Clusterización no jerárquica (PAM)
+```{r}
+silPAM = data.frame(res.pam$silinfo$widths)
+silPAM$country = row.names(silPAM)
+malPAM = silPAM[silPAM$sil_width<0,"country"]%>%sort() 
+```
+
+### 6.2. Clusterización agrupativa (AGNES)
+```{r}
+silAGNES = data.frame(res.agnes$silinfo$widths)
+silAGNES$country = row.names(silAGNES)
+malAGNES = silAGNES[silAGNES$sil_width<0,"country"]%>%sort() 
+```
+
+### 6.3. Clusterización divisiva (DIANA)
+```{r}
+silDIANA = data.frame(res.diana$silinfo$widths)
+silDIANA$country = row.names(silDIANA)
+malDIANA = silDIANA[silDIANA$sil_width<0,"country"]%>%sort() 
+```
+
+### 6.4. Juntar elementos mal clusterizados en un solo data frame
+```{r}
+mal_Clus = as.data.frame(qpcR:::cbind.na(malPAM, malAGNES, malDIANA))
+mal_Clus
+```
+
+## 7. Graficar la mejor clusterización (DIANA)
+```{r}
+proyeccion = cmdscale(g.dist, k=2,add = T) 
+cluster_barbara$dim1 <- proyeccion$points[,1]
+cluster_barbara$dim2 <- proyeccion$points[,2]
+base = ggplot(cluster_barbara, aes(x=dim1, y=dim2,label=row.names(cluster_barbara))) 
+```
